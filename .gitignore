@@ -3,3 +3,7 @@ node_modules/
 /load-testing-dashboard/node_modules/
 /server/loadtest_history.db
 /locust/__pycache__
+/package-lock.json
+/loadtest_history.db
+/test_history.db
+/load-testing-dashboard/package-lock.json
