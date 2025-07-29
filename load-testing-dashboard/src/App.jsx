@@ -57,7 +57,7 @@ function App() {
     }
   }, []);
   // Fonction centralisée pour gérer la fin de test (résout le problème de stale closure)
-  const handleTestEnd = useCallback((eventType, data) => {
+  const handleTestEnd = useCallback(async (eventType, data) => {
     console.log(`🏁 ${eventType} received:`, data);
     
     // Capturer les métriques système finales
