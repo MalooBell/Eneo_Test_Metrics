@@ -1,38 +1,12 @@
 {
   "scenarios": [
     {
-      "name": "login",
-      "method": "POST",
-      "endpoint": "/login",
-      "payload": {
-        "email": "azebaze@gmail.com",
-        "password": "Root123@"
-      },
-      "weight": 1
-    },
-    {
-      "name": "get_objectives",
+      "name": "Récupérer les objectifs",
       "method": "GET",
       "endpoint": "/objectifs",
-      "weight": 1
-    },
-    {
-      "name": "create_objectif",
-      "method": "POST",
-      "endpoint": "/objectifs",
-      "payload": {
-        "titre": "Amélioration de la satisfaction client",
-        "description": "Mettre en œuvre un système de suivi automatique des plaintes.",
-        "metric": "Pourcentage",
-        "valeur": 90,
-        "poids": 20,
-        "date_debut": "2025-07-01",
-        "date_fin": "2025-08-30",
-        "statut_objectif": "En Attente de Validation",
-        "manager_id": 1,
-        "agent_id": 2
-      },
-      "weight": 1
+      "payload": {},
+      "weight": 1,
+      "headers": {}
     }
   ]
 }

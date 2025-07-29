@@ -1,0 +1,6 @@
+{
+  "watch": ["server/"],
+  "ext": "js,json",
+  "ignore": ["locust/*", "load-testing-dashboard/*", "prometheus/*"],
+  "exec": "node server/index.js"
+}
