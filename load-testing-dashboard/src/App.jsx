@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useCallback } from 'react';
 import Layout from './components/Layout/Layout';
 import TestForm from './components/TestForm/TestForm';
 import TestMetrics from './components/TestMetrics/TestMetrics';
@@ -25,6 +26,29 @@ function App() {
   // Connexion WebSocket
   useWebSocketConnection();
 
+  // Fonction centralisée pour gérer la fin de test (résout le problème de stale closure)
+  const handleTestEnd = useCallback((eventType, data) => {
+    console.log(`🏁 ${eventType} received:`, data);
+    
+    setIsTestRunning(false);
+    
+    // Utiliser la forme fonctionnelle pour accéder à la valeur la plus récente de testStats
+    setTestStats(currentStats => {
+      console.log('📊 Current testStats at end:', currentStats);
+      
+      if (currentStats) {
+        console.log('✅ Capturing final test stats:', currentStats);
+        setFinalTestStats(currentStats);
+        setShowSummaryModal(true);
+      } else {
+        console.log('❌ No testStats available at end');
+      }
+      
+      // Retourner la valeur actuelle pour ne pas modifier testStats ici
+      return currentStats;
+    });
+  }, []);
+
   // Écouter les événements WebSocket
   useWebSocket('test_started', (data) => {
     console.log('🚀 WebSocket test_started received:', data);
@@ -37,54 +61,37 @@ function App() {
     setTestStartTime(new Date());
   }, []);
 
+  // Utiliser la fonction centralisée pour test_stopped
   useWebSocket('test_stopped', (data) => {
-    console.log('🛑 WebSocket test_stopped received:', data);
-    
-    setIsTestRunning(false);
-    
-    // Capturer les métriques finales et afficher le modal
-    setTimeout(() => {
-      if (testStats) {
-        console.log('✅ Capturing final test stats:', testStats);
-        setFinalTestStats(testStats);
-        setShowSummaryModal(true);
-      } else {
-        console.log('❌ No testStats available at stop');
-      }
-    }, 100);
-  }, [testStats]);
+    handleTestEnd('test_stopped', data);
+  }, [handleTestEnd]);
 
+  // Utiliser la fonction centralisée pour test_completed
   useWebSocket('test_completed', (data) => {
-    console.log('✅ WebSocket test_completed received:', data);
-    
-    setIsTestRunning(false);
-    
-    // Capturer les métriques finales et afficher le modal
-    setTimeout(() => {
-      if (testStats) {
-        console.log('✅ Capturing final test stats:', testStats);
-        setFinalTestStats(testStats);
-        setShowSummaryModal(true);
-      } else {
-        console.log('❌ No testStats available at completion');
-      }
-    }, 100);
-  }, [testStats]);
+    handleTestEnd('test_completed', data);
+  }, [handleTestEnd]);
 
-  useWebSocket('stats_update', (data) => {
+  // Gestionnaire pour les mises à jour des stats avec capture des métriques initiales
+  const handleStatsUpdate = useCallback((data) => {
     console.log('📈 WebSocket stats_update received:', data);
     
     if (data && data.stats) {
-      // Capturer les premières métriques reçues pour ce test
-      if (!initialTestStats && isTestRunning) {
-        console.log('📸 Capturing initial test stats:', data.stats);
-        setInitialTestStats(data.stats);
-      }
+      // Utiliser la forme fonctionnelle pour capturer les métriques initiales
+      setInitialTestStats(currentInitial => {
+        // Ne capturer qu'une seule fois au début du test
+        if (!currentInitial && isTestRunning) {
+          console.log('📸 Capturing initial test stats:', data.stats);
+          return data.stats;
+        }
+        return currentInitial;
+      });
       
       // Toujours mettre à jour les stats courantes
       setTestStats(data.stats);
     }
-  });
+  }, [isTestRunning]);
+
+  useWebSocket('stats_update', handleStatsUpdate, [handleStatsUpdate]);
 
   // Charger le statut initial
   useEffect(() => {
