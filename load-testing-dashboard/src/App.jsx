@@ -90,6 +90,7 @@ function App() {
 
   // Fonction pour fermer le modal et réinitialiser les états
   const handleCloseSummaryModal = () => {
+    console.log('Closing summary modal and resetting states');
     setShowSummaryModal(false);
     setCurrentTest(null);
     setTestStats(null);

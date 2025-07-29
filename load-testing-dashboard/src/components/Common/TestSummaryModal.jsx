@@ -22,10 +22,16 @@ const TestSummaryModal = ({
 }) => {
   // Calculer les métriques de début et de fin
   const metrics = useMemo(() => {
+    console.log('TestSummaryModal - initialStats:', initialStats);
+    console.log('TestSummaryModal - finalStats:', finalStats);
+    
     if (!initialStats || !finalStats) return null;
 
     const initialAggregated = initialStats.stats?.find(s => s.name === 'Aggregated') || {};
     const finalAggregated = finalStats.stats?.find(s => s.name === 'Aggregated') || {};
+
+    console.log('Initial aggregated:', initialAggregated);
+    console.log('Final aggregated:', finalAggregated);
 
     const initial = {
       avgResponseTime: initialAggregated.avg_response_time || 0,
@@ -44,6 +50,9 @@ const TestSummaryModal = ({
       totalRequests: finalAggregated.num_requests || 0,
       totalFailures: finalAggregated.num_failures || 0
     };
+
+    console.log('Processed initial metrics:', initial);
+    console.log('Processed final metrics:', final);
 
     return { initial, final };
   }, [initialStats, finalStats]);
