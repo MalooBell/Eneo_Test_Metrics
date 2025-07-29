@@ -27,13 +27,15 @@ function App() {
 
   // Écouter les événements WebSocket
   useWebSocket('test_started', (data) => {
+    console.log('Test started:', data);
     setIsTestRunning(true);
     setCurrentTest({ id: data.testId, name: data.name });
     // Réinitialiser les états pour le nouveau test
     setInitialTestStats(null);
     setFinalTestStats(null);
     setTestStartTime(new Date());
-  });
+  }
+  )
 
   useWebSocket('test_stopped', () => {
     // Capturer les métriques finales avant de réinitialiser
@@ -90,7 +92,6 @@ function App() {
 
   // Fonction pour fermer le modal et réinitialiser les états
   const handleCloseSummaryModal = () => {
-    console.log('Closing summary modal and resetting states');
     setShowSummaryModal(false);
     setCurrentTest(null);
     setTestStats(null);
