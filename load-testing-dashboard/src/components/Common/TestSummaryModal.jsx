@@ -4,6 +4,8 @@ import {
   ClockIcon,
   ChartBarIcon,
   ExclamationTriangleIcon,
+  CpuChipIcon,
+  CircleStackIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
   MinusIcon,
@@ -17,6 +19,8 @@ const TestSummaryModal = ({
   onClose, 
   initialStats, 
   finalStats, 
+  initialSystemStats,
+  finalSystemStats,
   testName, 
   testStartTime 
 }) => {
@@ -47,6 +51,60 @@ const TestSummaryModal = ({
 
     return { initial, final };
   }, [initialStats, finalStats]);
+
+  // Calculer les métriques système de début et de fin
+  const systemMetrics = useMemo(() => {
+    if (!initialSystemStats || !finalSystemStats) return null;
+
+    // Fonction utilitaire pour traiter les métriques Prometheus
+    const processMetricData = (metricData) => {
+      if (!metricData || !metricData.data || !metricData.data.result) return [];
+      return metricData.data.result;
+    };
+
+    // Fonction pour calculer l'utilisation CPU
+    const calculateCpuUsage = (systemData) => {
+      const cpuData = processMetricData(systemData['rate(node_cpu_seconds_total[5m])']);
+      if (!cpuData.length) return 0;
+      
+      const totalUsage = cpuData.reduce((sum, cpu) => {
+        const value = parseFloat(cpu.value[1]);
+        return sum + (isNaN(value) ? 0 : value * 100);
+      }, 0);
+      return Math.round(totalUsage / cpuData.length);
+    };
+
+    // Fonction pour calculer l'utilisation mémoire
+    const calculateMemoryUsage = (systemData) => {
+      const memoryTotal = processMetricData(systemData['node_memory_MemTotal_bytes']);
+      const memoryAvailable = processMetricData(systemData['node_memory_MemAvailable_bytes']);
+      
+      if (!memoryTotal.length || !memoryAvailable.length) return { used: 0, total: 0, percentage: 0 };
+      
+      const total = parseFloat(memoryTotal[0].value[1]);
+      const available = parseFloat(memoryAvailable[0].value[1]);
+      const used = total - available;
+      const percentage = Math.round((used / total) * 100);
+      
+      return {
+        used: Math.round(used / 1024 / 1024 / 1024 * 10) / 10, // GB
+        total: Math.round(total / 1024 / 1024 / 1024 * 10) / 10, // GB
+        percentage
+      };
+    };
+
+    const initial = {
+      cpuUsage: calculateCpuUsage(initialSystemStats),
+      memoryUsage: calculateMemoryUsage(initialSystemStats)
+    };
+
+    const final = {
+      cpuUsage: calculateCpuUsage(finalSystemStats),
+      memoryUsage: calculateMemoryUsage(finalSystemStats)
+    };
+
+    return { initial, final };
+  }, [initialSystemStats, finalSystemStats]);
 
   // Calculer la durée du test
   const testDuration = useMemo(() => {
@@ -132,6 +190,10 @@ const TestSummaryModal = ({
   const responseTimeChange = calculateChange(metrics.initial.avgResponseTime, metrics.final.avgResponseTime);
   const rpsChange = calculateChange(metrics.initial.requestsPerSecond, metrics.final.requestsPerSecond);
   const errorRateChange = calculateChange(metrics.initial.errorRate, metrics.final.errorRate);
+  
+  // Calculer les changements pour les métriques système
+  const cpuChange = systemMetrics ? calculateChange(systemMetrics.initial.cpuUsage, systemMetrics.final.cpuUsage) : null;
+  const memoryChange = systemMetrics ? calculateChange(systemMetrics.initial.memoryUsage.percentage, systemMetrics.final.memoryUsage.percentage) : null;
 
   const metricsData = [
     {
@@ -160,8 +222,30 @@ const TestSummaryModal = ({
     }
   ];
 
+  // Métriques système (si disponibles)
+  const systemMetricsData = systemMetrics ? [
+    {
+      title: 'Utilisation CPU',
+      icon: CpuChipIcon,
+      initial: `${systemMetrics.initial.cpuUsage}%`,
+      final: `${systemMetrics.final.cpuUsage}%`,
+      change: cpuChange,
+      isErrorMetric: true // Une augmentation du CPU est généralement négative
+    },
+    {
+      title: 'Utilisation Mémoire',
+      icon: CircleStackIcon,
+      initial: `${systemMetrics.initial.memoryUsage.percentage}% (${systemMetrics.initial.memoryUsage.used}GB)`,
+      final: `${systemMetrics.final.memoryUsage.percentage}% (${systemMetrics.final.memoryUsage.used}GB)`,
+      change: memoryChange,
+      isErrorMetric: true // Une augmentation de la mémoire est généralement négative
+    }
+  ] : [];
   // Déterminer si le test a des problèmes
-  const hasPerformanceIssues = responseTimeChange.trend === 'up' || errorRateChange.trend === 'up';
+  const hasPerformanceIssues = responseTimeChange.trend === 'up' || 
+                               errorRateChange.trend === 'up' ||
+                               (cpuChange && cpuChange.trend === 'up') ||
+                               (memoryChange && memoryChange.trend === 'up');
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -227,7 +311,7 @@ const TestSummaryModal = ({
           {/* Comparatif des métriques */}
           <div>
             <h4 className="text-lg font-medium text-gray-900 mb-4">
-              Évolution des Performances
+              Évolution des Performances de l'Application
             </h4>
             <div className="space-y-4">
               {metricsData.map((metric, index) => {
@@ -282,6 +366,66 @@ const TestSummaryModal = ({
             </div>
           </div>
 
+          {/* Métriques système */}
+          {systemMetrics && (
+            <div className="mt-6">
+              <h4 className="text-lg font-medium text-gray-900 mb-4">
+                Impact sur le Système
+              </h4>
+              <div className="space-y-4">
+                {systemMetricsData.map((metric, index) => {
+                  const Icon = metric.icon;
+                  return (
+                    <div key={index} className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-2">
+                          <Icon className="h-5 w-5 text-gray-600" />
+                          <span className="font-medium text-gray-900">{metric.title}</span>
+                        </div>
+                        <div className={cn(
+                          "flex items-center space-x-1 px-2 py-1 rounded-full text-sm font-medium",
+                          getTrendColor(metric.change.trend, metric.isErrorMetric)
+                        )}>
+                          {getTrendIcon(metric.change.trend)}
+                          <span>{metric.change.value}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="text-center">
+                          <div className="text-gray-500">Début</div>
+                          <div className="font-semibold text-gray-900">{metric.initial}</div>
+                        </div>
+                        
+                        <div className="flex-1 mx-4">
+                          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className={cn(
+                                "h-full transition-all duration-300",
+                                metric.change.trend === 'up' && metric.isErrorMetric ? 'bg-red-400' :
+                                metric.change.trend === 'down' && metric.isErrorMetric ? 'bg-green-400' :
+                                metric.change.trend === 'up' ? 'bg-green-400' :
+                                metric.change.trend === 'down' ? 'bg-red-400' : 'bg-gray-400'
+                              )}
+                              style={{ 
+                                width: `${Math.min(100, Math.abs(metric.change.rawChange || 0) * 2)}%` 
+                              }}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="text-center">
+                          <div className="text-gray-500">Fin</div>
+                          <div className="font-semibold text-gray-900">{metric.final}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Recommandations */}
           {hasPerformanceIssues && (
             <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -295,6 +439,12 @@ const TestSummaryModal = ({
                 )}
                 {errorRateChange.trend === 'up' && (
                   <li>• Le taux d'erreur a augmenté, vérifiez la stabilité de l'application</li>
+                )}
+                {cpuChange && cpuChange.trend === 'up' && (
+                  <li>• L'utilisation CPU a augmenté, considérez l'optimisation des ressources serveur</li>
+                )}
+                {memoryChange && memoryChange.trend === 'up' && (
+                  <li>• L'utilisation mémoire a augmenté, surveillez les fuites mémoire potentielles</li>
                 )}
                 <li>• Analysez les logs pour identifier les goulots d'étranglement</li>
                 <li>• Considérez une montée en charge plus progressive</li>
@@ -310,8 +460,8 @@ const TestSummaryModal = ({
                 Test Réussi
               </h5>
               <p className="text-sm text-green-700">
-                Les performances sont restées stables ou se sont améliorées pendant le test. 
-                Votre application gère bien la charge testée.
+                Les performances de l'application et du système sont restées stables ou se sont améliorées pendant le test. 
+                Votre infrastructure gère bien la charge testée.
               </p>
             </div>
           )}

@@ -7,7 +7,7 @@ import TestHistory from './components/TestHistory/TestHistory';
 import Monitoring from './components/Monitoring/Monitoring';
 import Visualization from './components/Visualization/Visualization';
 import TestSummaryModal from './components/Common/TestSummaryModal';
-import { testService } from './services/api';
+import { testService, metricsService } from './services/api';
 import { useWebSocket, useWebSocketConnection } from './hooks/useWebSocket';
 
 function App() {
@@ -22,13 +22,48 @@ function App() {
   const [finalTestStats, setFinalTestStats] = useState(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [testStartTime, setTestStartTime] = useState(null);
+  
+  // États pour les métriques système
+  const [initialSystemStats, setInitialSystemStats] = useState(null);
+  const [finalSystemStats, setFinalSystemStats] = useState(null);
 
   // Connexion WebSocket
   useWebSocketConnection();
 
+  // Fonction pour récupérer les métriques système
+  const fetchSystemMetrics = useCallback(async () => {
+    try {
+      const queries = [
+        'rate(node_cpu_seconds_total[5m])',
+        'node_memory_MemTotal_bytes',
+        'node_memory_MemAvailable_bytes'
+      ];
+
+      const results = {};
+      for (const query of queries) {
+        try {
+          const result = await metricsService.query(query);
+          results[query] = result;
+        } catch (error) {
+          console.error(`Erreur requête système ${query}:`, error);
+          results[query] = null;
+        }
+      }
+      
+      return results;
+    } catch (error) {
+      console.error('Erreur récupération métriques système:', error);
+      return null;
+    }
+  }, []);
   // Fonction centralisée pour gérer la fin de test (résout le problème de stale closure)
   const handleTestEnd = useCallback((eventType, data) => {
     console.log(`🏁 ${eventType} received:`, data);
+    
+    // Capturer les métriques système finales
+    console.log('📊 Capturing final system metrics...');
+    const finalSystemMetrics = await fetchSystemMetrics();
+    setFinalSystemStats(finalSystemMetrics);
     
     setIsTestRunning(false);
     
@@ -47,10 +82,10 @@ function App() {
       // Retourner la valeur actuelle pour ne pas modifier testStats ici
       return currentStats;
     });
-  }, []);
+  }, [fetchSystemMetrics]);
 
   // Écouter les événements WebSocket
-  useWebSocket('test_started', (data) => {
+  useWebSocket('test_started', async (data) => {
     console.log('🚀 WebSocket test_started received:', data);
     setIsTestRunning(true);
     setCurrentTest({ id: data.testId, name: data.name });
@@ -58,7 +93,14 @@ function App() {
     console.log('🔄 Resetting test states for new test');
     setInitialTestStats(null);
     setFinalTestStats(null);
+    setInitialSystemStats(null);
+    setFinalSystemStats(null);
     setTestStartTime(new Date());
+    
+    // Capturer les métriques système initiales
+    console.log('📊 Capturing initial system metrics...');
+    const initialSystemMetrics = await fetchSystemMetrics();
+    setInitialSystemStats(initialSystemMetrics);
   }, []);
 
   // Utiliser la fonction centralisée pour test_stopped
@@ -120,6 +162,8 @@ function App() {
     setTestStats(null);
     setInitialTestStats(null);
     setFinalTestStats(null);
+    setInitialSystemStats(null);
+    setFinalSystemStats(null);
     setTestStartTime(null);
   };
 
@@ -211,6 +255,8 @@ function App() {
         onClose={handleCloseSummaryModal}
         initialStats={initialTestStats}
         finalStats={finalTestStats}
+        initialSystemStats={initialSystemStats}
+        finalSystemStats={finalSystemStats}
         testName={currentTest?.name}
         testStartTime={testStartTime}
       />
