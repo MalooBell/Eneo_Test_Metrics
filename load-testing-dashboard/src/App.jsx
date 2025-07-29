@@ -27,47 +27,63 @@ function App() {
 
   // Écouter les événements WebSocket
   useWebSocket('test_started', (data) => {
+    console.log('🚀 WebSocket test_started received:', data);
     setIsTestRunning(true);
     setCurrentTest({ id: data.testId, name: data.name });
-    setCurrentTest({ id: data.testId, name: data.name });
     // Réinitialiser les états pour le nouveau test
+    console.log('🔄 Resetting test states for new test');
     setInitialTestStats(null);
     setFinalTestStats(null);
     setTestStartTime(new Date());
   }, []);
 
-  useWebSocket('test_stopped', () => {
-    // Capturer les métriques finales avant de réinitialiser
-    if (testStats) {
-      setFinalTestStats(testStats);
-    }
+  useWebSocket('test_stopped', (data) => {
+    console.log('🛑 WebSocket test_stopped received:', data);
     
     setIsTestRunning(false);
-    setShowSummaryModal(true);
-  });
+    
+    // Capturer les métriques finales et afficher le modal
+    setTimeout(() => {
+      if (testStats) {
+        console.log('✅ Capturing final test stats:', testStats);
+        setFinalTestStats(testStats);
+        setShowSummaryModal(true);
+      } else {
+        console.log('❌ No testStats available at stop');
+      }
+    }, 100);
+  }, [testStats]);
 
-  useWebSocket('test_completed', () => {
-    // Capturer les métriques finales avant de réinitialiser
-    if (testStats) {
-      setFinalTestStats(testStats);
-    }
+  useWebSocket('test_completed', (data) => {
+    console.log('✅ WebSocket test_completed received:', data);
     
     setIsTestRunning(false);
-    setShowSummaryModal(true);
-  });
+    
+    // Capturer les métriques finales et afficher le modal
+    setTimeout(() => {
+      if (testStats) {
+        console.log('✅ Capturing final test stats:', testStats);
+        setFinalTestStats(testStats);
+        setShowSummaryModal(true);
+      } else {
+        console.log('❌ No testStats available at completion');
+      }
+    }, 100);
+  }, [testStats]);
 
   useWebSocket('stats_update', (data) => {
-    // Capturer les premières métriques reçues pour ce test
-    if (!initialTestStats && data.stats && data.stats.stats && isTestRunning) {
-      const aggregated = data.stats.stats.find(s => s.name === 'Aggregated');
-      if (aggregated && aggregated.num_requests > 0) {
-        console.log('Capturing initial test stats:', data.stats);
+    console.log('📈 WebSocket stats_update received:', data);
+    
+    if (data && data.stats) {
+      // Capturer les premières métriques reçues pour ce test
+      if (!initialTestStats && isTestRunning) {
+        console.log('📸 Capturing initial test stats:', data.stats);
         setInitialTestStats(data.stats);
       }
+      
+      // Toujours mettre à jour les stats courantes
+      setTestStats(data.stats);
     }
-    
-    // Toujours mettre à jour les stats courantes
-    setTestStats(data.stats);
   });
 
   // Charger le statut initial
@@ -91,6 +107,7 @@ function App() {
 
   // Fonction pour fermer le modal et réinitialiser les états
   const handleCloseSummaryModal = () => {
+    console.log('🔄 Closing summary modal and resetting states');
     setShowSummaryModal(false);
     setCurrentTest(null);
     setTestStats(null);
