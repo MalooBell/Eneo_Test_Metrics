@@ -16,10 +16,11 @@ function App() {
   const [testStats, setTestStats] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   
-  // États pour le résumé de test
-  const [testSummary, setTestSummary] = useState(null);
+  // États pour la capture des métriques de début et fin
+  const [initialTestStats, setInitialTestStats] = useState(null);
+  const [finalTestStats, setFinalTestStats] = useState(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
-  const [firstMetrics, setFirstMetrics] = useState(null);
+  const [testStartTime, setTestStartTime] = useState(null);
 
   // Connexion WebSocket
   useWebSocketConnection();
@@ -28,51 +29,43 @@ function App() {
   useWebSocket('test_started', (data) => {
     setIsTestRunning(true);
     setCurrentTest({ id: data.testId, name: data.name });
-    setFirstMetrics(null); // Réinitialiser pour le nouveau test
+    // Réinitialiser les états pour le nouveau test
+    setInitialTestStats(null);
+    setFinalTestStats(null);
+    setTestStartTime(new Date());
   });
 
-  useWebSocket('test_stopped', (data) => {
-    setIsTestRunning(false);
-    
-    // Créer le résumé du test
-    if (currentTest && testStats) {
-      createTestSummary('stopped');
+  useWebSocket('test_stopped', () => {
+    // Capturer les métriques finales avant de réinitialiser
+    if (testStats) {
+      setFinalTestStats(testStats);
     }
     
-    setCurrentTest(null);
-    setTestStats(null);
-    setFirstMetrics(null);
+    setIsTestRunning(false);
+    setShowSummaryModal(true);
   });
 
-  useWebSocket('test_completed', (data) => {
-    setIsTestRunning(false);
-    
-    // Créer le résumé du test
-    if (currentTest && testStats) {
-      createTestSummary('completed');
+  useWebSocket('test_completed', () => {
+    // Capturer les métriques finales avant de réinitialiser
+    if (testStats) {
+      setFinalTestStats(testStats);
     }
     
-    setCurrentTest(null);
-    setTestStats(null);
-    setFirstMetrics(null);
+    setIsTestRunning(false);
+    setShowSummaryModal(true);
   });
 
   useWebSocket('stats_update', (data) => {
-    // Capturer les premières métriques reçues
-    if (!firstMetrics && data.stats && data.stats.stats) {
+    // Capturer les premières métriques reçues pour ce test
+    if (!initialTestStats && data.stats && data.stats.stats && isTestRunning) {
       const aggregated = data.stats.stats.find(s => s.name === 'Aggregated');
       if (aggregated && aggregated.num_requests > 0) {
-        setFirstMetrics({
-          avgResponseTime: aggregated.avg_response_time,
-          requestsPerSecond: aggregated.current_rps,
-          errorRate: aggregated.num_requests > 0 ? (aggregated.num_failures / aggregated.num_requests) * 100 : 0,
-          totalRequests: aggregated.num_requests,
-          totalFailures: aggregated.num_failures,
-          timestamp: new Date()
-        });
+        console.log('Capturing initial test stats:', data.stats);
+        setInitialTestStats(data.stats);
       }
     }
     
+    // Toujours mettre à jour les stats courantes
     setTestStats(data.stats);
   });
 
@@ -95,42 +88,14 @@ function App() {
     }
   };
 
-  // Fonction pour créer le résumé du test
-  const createTestSummary = (finalStatus) => {
-    if (!currentTest || !testStats || !firstMetrics) return;
-
-    const aggregated = testStats.stats?.find(s => s.name === 'Aggregated');
-    if (!aggregated) return;
-
-    const endMetrics = {
-      avgResponseTime: aggregated.avg_response_time,
-      requestsPerSecond: aggregated.current_rps,
-      errorRate: aggregated.num_requests > 0 ? (aggregated.num_failures / aggregated.num_requests) * 100 : 0,
-      totalRequests: aggregated.num_requests,
-      totalFailures: aggregated.num_failures,
-      timestamp: new Date()
-    };
-
-    const duration = firstMetrics.timestamp && endMetrics.timestamp 
-      ? Math.round((endMetrics.timestamp - firstMetrics.timestamp) / 1000)
-      : 0;
-
-    const summary = {
-      testName: currentTest.name,
-      testId: currentTest.id,
-      finalStatus,
-      duration: duration > 0 ? `${Math.floor(duration / 60)}m ${duration % 60}s` : 'N/A',
-      users: testStats.user_count || 0,
-      startMetrics: firstMetrics,
-      endMetrics,
-      createdAt: new Date()
-    };
-
-    setTestSummary(summary);
-    setShowSummaryModal(true);
-
-    // TODO: Sauvegarder le résumé (sera implémenté côté backend plus tard)
-    console.log('Résumé du test créé:', summary);
+  // Fonction pour fermer le modal et réinitialiser les états
+  const handleCloseSummaryModal = () => {
+    setShowSummaryModal(false);
+    setCurrentTest(null);
+    setTestStats(null);
+    setInitialTestStats(null);
+    setFinalTestStats(null);
+    setTestStartTime(null);
   };
 
   const handleStartTest = async (testConfig) => {
@@ -218,8 +183,11 @@ function App() {
       {/* Modal de résumé de test */}
       <TestSummaryModal
         isOpen={showSummaryModal}
-        onClose={() => setShowSummaryModal(false)}
-        testSummary={testSummary}
+        onClose={handleCloseSummaryModal}
+        initialStats={initialTestStats}
+        finalStats={finalTestStats}
+        testName={currentTest?.name}
+        testStartTime={testStartTime}
       />
     </Layout>
   );
