@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { 
   PlayIcon, 
   StopIcon, 
-  Cog6ToothIcon,
+  Cog6ToothIcon, 
   ExclamationTriangleIcon 
 } from '@heroicons/react/24/outline';
 import { cn } from '../../utils/cn';
 import LoadingSpinner from '../Common/LoadingSpinner';
+import ScenarioBuilder from './ScenarioBuilder';
 
 const TestForm = ({ 
   onStartTest, 
@@ -15,12 +16,24 @@ const TestForm = ({
   isLoading,
   currentTest 
 }) => {
+  // Scénario par défaut pré-rempli
+  const defaultScenarios = [
+    {
+      name: 'Récupérer les objectifs',
+      method: 'GET',
+      endpoint: '/objectifs',
+      payload: '',
+      weight: 1
+    }
+  ];
+
   const [formData, setFormData] = useState({
     name: '',
     targetUrl: 'http://localhost:8000/api',
     users: 10,
     spawnRate: 2,
-    duration: 300 // 5 minutes par défaut
+    duration: 300, // 5 minutes par défaut
+    scenarios: defaultScenarios
   });
 
   const [errors, setErrors] = useState({});
@@ -68,6 +81,30 @@ const TestForm = ({
       newErrors.duration = 'La durée ne peut pas être négative';
     }
 
+    // Validation des scénarios
+    if (!formData.scenarios || formData.scenarios.length === 0) {
+      newErrors.scenarios = 'Au moins un scénario est requis';
+    } else {
+      // Vérifier que chaque scénario a un nom et un endpoint
+      const scenarioErrors = formData.scenarios.some((scenario, index) => {
+        if (!scenario.name.trim()) return true;
+        if (!scenario.endpoint.trim()) return true;
+        
+        // Vérifier la validité du JSON pour POST/PUT
+        if ((scenario.method === 'POST' || scenario.method === 'PUT') && scenario.payload) {
+          try {
+            JSON.parse(scenario.payload);
+          } catch (e) {
+            return true;
+          }
+        }
+        return false;
+      });
+      
+      if (scenarioErrors) {
+        newErrors.scenarios = 'Certains scénarios contiennent des erreurs';
+      }
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -93,6 +130,20 @@ const TestForm = ({
     onStopTest();
   };
 
+  const handleScenariosChange = (newScenarios) => {
+    setFormData(prev => ({
+      ...prev,
+      scenarios: newScenarios
+    }));
+    
+    // Effacer l'erreur des scénarios si elle existe
+    if (errors.scenarios) {
+      setErrors(prev => ({
+        ...prev,
+        scenarios: null
+      }));
+    }
+  };
   return (
     <div className="space-y-6">
       {/* En-tête */}
@@ -115,7 +166,10 @@ const TestForm = ({
       {/* Formulaire */}
       <div className="card">
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Configuration générale */}
+          <div>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Configuration Générale</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Nom du test */}
             <div>
               <label htmlFor="name" className="label">
@@ -256,8 +310,24 @@ const TestForm = ({
                 Durée en secondes (0 = illimité)
               </p>
             </div>
+
+            </div>
           </div>
 
+          {/* Scénarios de test */}
+          <div>
+            <ScenarioBuilder
+              scenarios={formData.scenarios}
+              onScenariosChange={handleScenariosChange}
+              disabled={isTestRunning}
+            />
+            {errors.scenarios && (
+              <p className="mt-2 text-sm text-error-600 flex items-center">
+                <ExclamationTriangleIcon className="h-4 w-4 mr-1" />
+                {errors.scenarios}
+              </p>
+            )}
+          </div>
           {/* Boutons d'action */}
           <div className="flex items-center justify-between pt-6 border-t border-gray-200">
             <div className="text-sm text-gray-500">

@@ -260,6 +260,44 @@ const TestHistory = ({ onNavigateToVisualization, isTestRunning }) => {
             </div>
             
             <div className="p-6 overflow-y-auto">
+              {/* Résumé comparatif (si disponible) */}
+              {selectedTest.summary && (
+                <div className="mb-6">
+                  <h4 className="font-semibold text-gray-700 mb-3">Résumé Comparatif</h4>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div className="text-center">
+                        <div className="text-gray-500">Temps de réponse</div>
+                        <div className="font-medium">
+                          {selectedTest.summary.startMetrics?.avgResponseTime?.toFixed(0) || 'N/A'}ms → {selectedTest.summary.endMetrics?.avgResponseTime?.toFixed(0) || 'N/A'}ms
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {selectedTest.summary.responseTimeChange || 'N/A'}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-gray-500">Requêtes/sec</div>
+                        <div className="font-medium">
+                          {selectedTest.summary.startMetrics?.requestsPerSecond?.toFixed(1) || 'N/A'} → {selectedTest.summary.endMetrics?.requestsPerSecond?.toFixed(1) || 'N/A'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {selectedTest.summary.rpsChange || 'N/A'}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-gray-500">Taux d'erreur</div>
+                        <div className="font-medium">
+                          {selectedTest.summary.startMetrics?.errorRate?.toFixed(1) || 'N/A'}% → {selectedTest.summary.endMetrics?.errorRate?.toFixed(1) || 'N/A'}%
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {selectedTest.summary.errorRateChange || 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
                 <div>
                   <p className="font-semibold text-gray-700">Configuration</p>

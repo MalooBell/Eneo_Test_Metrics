@@ -22,6 +22,7 @@ const NodeExporterCharts = memo(({ historyRef, historyVersion, loading }) => {
     diskIO: true,
     diskUsage: true,
     networkTraffic: true,
+    networkThroughput: true,
     systemLoad: true
   });
 
@@ -605,7 +606,7 @@ const NodeExporterCharts = memo(({ historyRef, historyVersion, loading }) => {
       {/* Résumé de l'historique enrichi */}
       <div className="card">
         <h4 className="text-lg font-medium text-gray-900 mb-4">Résumé de l'Historique Accumulé</h4>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-4 text-sm">
           <div className="text-center p-3 bg-blue-50 rounded-lg">
             <div className="text-lg font-bold text-blue-700">{chartData.cpuDetailed.length}</div>
             <div className="text-xs text-blue-600">Points CPU</div>
@@ -625,6 +626,14 @@ const NodeExporterCharts = memo(({ historyRef, historyVersion, loading }) => {
           <div className="text-center p-3 bg-purple-50 rounded-lg">
             <div className="text-lg font-bold text-purple-700">{chartData.networkTraffic.length}</div>
             <div className="text-xs text-purple-600">Points réseau</div>
+          </div>
+          <div className="text-center p-3 bg-indigo-50 rounded-lg">
+            <div className="text-lg font-bold text-indigo-700">{chartData.networkTraffic.length}</div>
+            <div className="text-xs text-indigo-600">Points débit réseau</div>
+          </div>
+          <div className="text-center p-3 bg-indigo-50 rounded-lg">
+            <div className="text-lg font-bold text-indigo-700">{chartData.networkTraffic.length}</div>
+            <div className="text-xs text-indigo-600">Points débit réseau</div>
           </div>
           <div className="text-center p-3 bg-red-50 rounded-lg">
             <div className="text-lg font-bold text-red-700">{chartData.systemLoad.length}</div>
