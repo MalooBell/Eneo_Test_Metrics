@@ -1,0 +1,12 @@
+{
+  "scenarios": [
+    {
+      "name": "Chercher users",
+      "method": "GET",
+      "endpoint": "/users",
+      "payload": {},
+      "weight": 1,
+      "headers": {}
+    }
+  ]
+}

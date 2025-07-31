@@ -7,12 +7,17 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 const sqlite3 = require('sqlite3').verbose();
 const axios = require('axios');
+const fs = require('fs').promises; // NOUVEAU : Utilisation du module File System en mode asynchrone
+const path = require('path'); // NOUVEAU : Utilitaire pour gérer les chemins de fichiers
 
 // Configuration des constantes de l'application
 const API_PORT = 3001;
 const LOCUST_URL = 'http://localhost:8089';
 const PROMETHEUS_URL = 'http://localhost:9090';
 const DB_FILE = './loadtest_history.db';
+// NOUVEAU : Chemin dynamique vers le fichier de scénarios pour plus de robustesse
+const SCENARIOS_PATH = path.join(__dirname, '..', 'locust', 'scenarios.json');
+
 
 // Initialisation de l'application Express
 const app = express();
@@ -106,7 +111,6 @@ function startStatsPolling(testId) {
         }
       }
     } catch (error) {
-      // Si Locust ne répond pas, on ne stoppe pas le polling pour permettre une reconnexion
       console.error('Erreur lors de la récupération des stats Locust:', error.message);
       broadcast({ type: 'locust_error', message: 'Impossible de joindre Locust.' });
     }
@@ -140,7 +144,7 @@ async function stopTestInternal(testId, finalStatus, finalStats = null) {
             statsToSave = {
                 avg_response_time: aggregated.avg_response_time,
                 requests_per_second: aggregated.total_rps,
-                error_rate: aggregated.num_requests > 0 ? (aggregated.num_failures / aggregated.total_requests) * 100 : 0,
+                error_rate: aggregated.num_requests > 0 ? (aggregated.num_failures / aggregated.num_requests) * 100 : 0,
                 total_requests: aggregated.num_requests,
                 total_failures: aggregated.num_failures
             };
@@ -171,31 +175,79 @@ function getTestFromDb(testId) {
 //                      ROUTES DE L'API (EXPRESS)
 // =================================================================
 
+// MODIFIÉ : Route pour démarrer un test
 app.post('/api/tests/start', async (req, res) => {
-  const { name, targetUrl, users, spawnRate, duration } = req.body;
+  // Récupération des données du frontend, incluant les scénarios
+  const { name, targetUrl, users, spawnRate, duration, scenarios } = req.body;
   
+  // NOUVEAU : Validation des données entrantes
+  if (!scenarios || !Array.isArray(scenarios) || scenarios.length === 0) {
+    return res.status(400).json({ success: false, message: 'Au moins un scénario est requis.' });
+  }
+
   try {
+    // NOUVEAU : Préparation et écriture du fichier scenarios.json
+    const scenariosJson = {
+      scenarios: scenarios.map(s => {
+        let payloadObject = {};
+        // Tente de parser le payload s'il n'est pas vide
+        if (s.payload && typeof s.payload === 'string') {
+          try {
+            payloadObject = JSON.parse(s.payload);
+          } catch (e) {
+            // Si le parsing échoue, une erreur sera levée plus bas
+            throw new SyntaxError(`Payload JSON invalide pour le scénario "${s.name}"`);
+          }
+        }
+        return {
+          name: s.name || 'Unnamed Scenario',
+          method: s.method || 'GET',
+          endpoint: s.endpoint || '/',
+          payload: payloadObject,
+          weight: Number(s.weight) || 1,
+          headers: s.headers || {} // Ajout optionnel des headers
+        };
+      })
+    };
+    
+    // Écriture du fichier qui sera lu par Locust
+    await fs.writeFile(SCENARIOS_PATH, JSON.stringify(scenariosJson, null, 2), 'utf-8');
+    console.log(`Fichier scenarios.json mis à jour pour le test: "${name}"`);
+
+    // Démarrage du swarm Locust (logique existante)
     const payload = new URLSearchParams({ user_count: users, spawn_rate: spawnRate, host: targetUrl });
+    if (duration > 0) {
+        payload.append('run_time', `${duration}s`);
+    }
     await axios.post(`${LOCUST_URL}/swarm`, payload);
 
     const startTime = new Date().toISOString();
     const query = `INSERT INTO tests (name, status, start_time, target_url, users, spawn_rate, duration) VALUES (?, 'running', ?, ?, ?, ?, ?)`;
+    
     db.run(query, [name, startTime, targetUrl, users, spawnRate, duration], function(err) {
-      if (err) return res.status(500).json({ success: false, message: 'Erreur base de données.' });
+      if (err) {
+        console.error("Erreur d'insertion en base de données:", err);
+        return res.status(500).json({ success: false, message: 'Erreur lors de la sauvegarde du test en base de données.' });
+      }
       
       const testId = this.lastID;
-      if (duration > 0) {
-        setTimeout(() => axios.get(`${LOCUST_URL}/stop`), duration * 1000);
-      }
-
       startStatsPolling(testId);
       broadcast({ type: 'test_started', testId, name });
-      res.json({ success: true, testId });
+      res.status(200).json({ success: true, testId, message: 'Test démarré avec succès.' });
     });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Erreur communication avec Locust.' });
+    console.error("Erreur détaillée lors du démarrage du test:", error);
+    if (error instanceof SyntaxError) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    if (error.response) { // Erreur venant d'axios (ex: Locust non joignable)
+        return res.status(500).json({ success: false, message: `Erreur de communication avec Locust: ${error.message}` });
+    }
+    res.status(500).json({ success: false, message: 'Une erreur interne est survenue.' });
   }
 });
+
 
 app.post('/api/tests/stop', (req, res) => {
   db.get("SELECT id FROM tests WHERE status = 'running' ORDER BY start_time DESC LIMIT 1", async (err, row) => {

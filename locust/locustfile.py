@@ -1,108 +1,52 @@
-from datetime import date, timedelta
-import random, string
-from locust import HttpUser, task, between, SequentialTaskSet
-from prometheus_client import start_http_server, Counter, Gauge  # Import de Prometheus
+from locust import HttpUser, task, between
+import json
+import os
+from prometheus_client import start_http_server
 
-# Démarre le serveur HTTP Prometheus pour exposer les métriques sur le port 9646
 start_http_server(9646)
 
-BASE_URL = "http://host.docker.internal:8000/api"
-AGENT_ID = 1
-MANAGER_ID = 2
-
-# Définir des métriques Prometheus
-REQUESTS = Counter('locust_requests_total', 'Nombre total de requêtes effectuées')
-RESPONSE_TIME = Gauge('locust_response_time', 'Temps de réponse moyen des requêtes')
-
-def rnd_str(n=6):
-    return "".join(random.choices(string.ascii_uppercase, k=n))
-
-# ---------- Séquence Agent ----------
-class AgentFlow(SequentialTaskSet):
+class DynamicScenarioUser(HttpUser):
     wait_time = between(1, 3)
+    host = "http://host.docker.internal:8000/api"
+    scenarios = []  # Déclaré ici pour être accessible dans la tâche
 
     def on_start(self):
-        # Connexion session (cookie Laravel)
-        self.client.post("/login", json={
-            "email": "yoantioma4@gmail.com",
-            "password": "Azebaze04@Azebaze04@"
-        })
+        # Recharger scenarios.json à chaque lancement de test (nouvel utilisateur)
+        json_path = os.path.join(os.path.dirname(__file__), "scenarios.json")
+        try:
+            with open(json_path, "r") as f:
+                self.scenarios = json.load(f).get("scenarios", [])
+                print(f"[INFO] {len(self.scenarios)} scénarios chargés.")
+        except Exception as e:
+            print(f"[ERREUR] Impossible de charger scenarios.json : {e}")
+            self.scenarios = []
 
     @task
-    def creer_objectif_complet(self):
-        """
-        POST /objectifs
-        """
-        payload = {
-            "titre": f"Obj-{rnd_str()}",
-            "description": "Objectif Locust auto",
-            "metric": "Nb tickets résolus",
-            "valeur": random.randint(10, 50),
-            "poids": random.randint(5, 15),
-            "date_debut": date.today().isoformat(),
-            "date_fin": (date.today() + timedelta(days=90)).isoformat(),
-            "statut_objectif": "en_attente",
-            "manager_id": MANAGER_ID,
-            "agent_id": AGENT_ID
-        }
-
-        with self.client.post("/objectifs", json=payload, name="/objectifs [POST]", catch_response=True) as resp:
-            if resp.status_code == 201:
-                self.objectif_id = resp.json().get("id")
-                resp.success()
-                REQUESTS.inc()  # Incrémente le compteur des requêtes
-                RESPONSE_TIME.set(resp.elapsed.total_seconds())  # Enregistre le temps de réponse
-            else:
-                resp.failure(f"Création objectif KO ({resp.status_code})")
-
-    @task
-    def evaluer_objectif(self):
-        """
-        POST /evaluations
-        """
-        if not hasattr(self, "objectif_id"):
+    def run_scenarios(self):
+        if not self.scenarios:
+            print("[WARN] Aucun scénario à exécuter.")
             return
 
-        payload = {
-            "objectif_id": self.objectif_id,
-            "agent_id": AGENT_ID,
-            "manager_id": MANAGER_ID,
-            "comite_id": 1,
-            "note_eval": random.randint(1, 5),
-            "appreciation": "Évaluation Locust",
-            "type_evaluation": "auto"
-        }
-        self.client.post("/evaluations", json=payload, name="/evaluations [POST]")
-        REQUESTS.inc()  # Incrémente le compteur des requêtes
+        for scenario in self.scenarios:
+            method = scenario.get("method", "GET").upper()
+            endpoint = scenario.get("endpoint")
+            payload = scenario.get("payload", {})
+            name = scenario.get("name", endpoint)
+            headers = scenario.get("headers", {})
 
-# ---------- Séquence Manager ----------
-class ManagerFlow(SequentialTaskSet):
-    wait_time = between(1, 3)
+            if method == "POST" and "Content-Type" not in headers:
+                headers["Content-Type"] = "application/json"
 
-    def on_start(self):
-        self.client.post("/login", json={
-            "email": "jean.dupont@example.com",
-            "password": "Min_ad@123"
-        })
-
-    @task(2)
-    def lister_collaborateurs(self):
-        self.client.get(f"/managers/{MANAGER_ID}/collaborateurs", name="/managers/{id}/collaborateurs")
-
-    @task(1)
-    def valider_objectifs_agent(self):
-        self.client.post(f"/agents/{AGENT_ID}/objectifs/valider-tous", name="/agents/{id}/objectifs/valider-tous")
-
-# ---------- Utilisateurs Locust ----------
-class AgentUser(HttpUser):
-    tasks = [AgentFlow]
-    host = BASE_URL
-    wait_time = between(1, 5)
-    weight = 70  # 70 % du trafic
-
-class ManagerUser(HttpUser):
-    tasks = [ManagerFlow]
-    host = BASE_URL
-    wait_time = between(1, 5)
-    weight = 30  # 30 % du trafic
-
+            try:
+                if method == "GET":
+                    self.client.get(endpoint, name=f"{name} [GET]")
+                elif method == "POST":
+                    self.client.post(endpoint, json=payload, headers=headers, name=f"{name} [POST]")
+                elif method == "PUT":
+                    self.client.put(endpoint, json=payload, headers=headers, name=f"{name} [PUT]")
+                elif method == "DELETE":
+                    self.client.delete(endpoint, name=f"{name} [DELETE]")
+                else:
+                    print(f"[WARN] Méthode {method} non supportée.")
+            except Exception as e:
+                print(f"[ERREUR] Erreur requête {method} {endpoint} : {e}")
