@@ -1,9 +1,9 @@
 {
   "scenarios": [
     {
-      "name": "Chercher users",
+      "name": "Récupérer les objectifs",
       "method": "GET",
-      "endpoint": "/users",
+      "endpoint": "/objectifs",
       "payload": {},
       "weight": 1,
       "headers": {}
