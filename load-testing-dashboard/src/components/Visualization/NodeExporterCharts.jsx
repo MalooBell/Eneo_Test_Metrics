@@ -543,15 +543,15 @@ const NodeExporterCharts = memo(({ historyRef, historyVersion, loading }) => {
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500">Lecture:</span>
-                  <span className="font-medium">{currentMetrics.diskIO?.readMBps || 0} MB/s</span>
+                  <span className="font-medium">{currentMetrics.diskIO?.readKBps || 0} KB/s</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Écriture:</span>
-                  <span className="font-medium">{currentMetrics.diskIO?.writeMBps || 0} MB/s</span>
+                  <span className="font-medium">{currentMetrics.diskIO?.writeKBps || 0} KB/s</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Total I/O:</span>
-                  <span className="font-medium">{currentMetrics.diskIO?.totalIOPS || 0} MB/s</span>
+                  <span className="font-medium">{currentMetrics.diskIO?.totalIOPS || 0} KB/s</span>
                 </div>
               </div>
             </div>

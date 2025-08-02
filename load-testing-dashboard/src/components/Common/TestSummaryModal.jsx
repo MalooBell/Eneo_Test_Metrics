@@ -10,7 +10,10 @@ import {
   ArrowTrendingDownIcon,
   MinusIcon,
   CheckCircleIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  ServerIcon,
+  WifiIcon,
+  CircleStackIcon as DiskIcon
 } from '@heroicons/react/24/outline';
 import { cn } from '../../utils/cn';
 
@@ -105,6 +108,54 @@ const TestSummaryModal = ({
 
     return { initial, final };
   }, [initialSystemStats, finalSystemStats]);
+
+  // Calculer les estimations de ressources basées sur les métriques finales
+  const resourceEstimations = useMemo(() => {
+    if (!finalStats || !finalSystemStats) return null;
+
+    const finalAggregated = finalStats.stats?.find(s => s.name === 'Aggregated') || {};
+    
+    // Fonction utilitaire pour traiter les métriques Prometheus
+    const processMetricData = (metricData) => {
+      if (!metricData || !metricData.data || !metricData.data.result) return [];
+      return metricData.data.result;
+    };
+
+    // Calculer les métriques système finales
+    const cpuData = processMetricData(finalSystemStats['rate(node_cpu_seconds_total[5m])']);
+    const memoryTotal = processMetricData(finalSystemStats['node_memory_MemTotal_bytes']);
+    const memoryAvailable = processMetricData(finalSystemStats['node_memory_MemAvailable_bytes']);
+    const networkRx = processMetricData(finalSystemStats['node_network_receive_bytes_total']);
+    const networkTx = processMetricData(finalSystemStats['node_network_transmit_bytes_total']);
+    const diskRead = processMetricData(finalSystemStats['node_disk_read_bytes_total']);
+    const diskWrite = processMetricData(finalSystemStats['node_disk_written_bytes_total']);
+
+    // Calcul CPU peak
+    const peakCpuUsage = cpuData.length > 0 ? 
+      cpuData.reduce((sum, cpu) => {
+        const value = parseFloat(cpu.value[1]);
+        return sum + (isNaN(value) ? 0 : value * 100);
+      }, 0) / cpuData.length : 0;
+
+    // Calcul mémoire peak
+    const peakMemoryUsage = memoryTotal.length && memoryAvailable.length ? 
+      (parseFloat(memoryTotal[0].value[1]) - parseFloat(memoryAvailable[0].value[1])) / 1024 / 1024 / 1024 : 0;
+
+    // Calcul réseau peak (approximation)
+    const peakNetworkThroughput = (networkRx.length && networkTx.length) ?
+      (parseFloat(networkRx[0].value[1]) + parseFloat(networkTx[0].value[1])) / 1024 / 1024 : 0;
+
+    // Calcul disque I/O peak
+    const peakDiskIO = (diskRead.length && diskWrite.length) ?
+      (parseFloat(diskRead[0].value[1]) + parseFloat(diskWrite[0].value[1])) / 1024 / 1024 : 0;
+
+    return {
+      estimatedCpuCores: Math.max(1, Math.ceil((peakCpuUsage / 100) / 0.75)),
+      estimatedRam: Math.max(1, Math.ceil(peakMemoryUsage * 1.5)),
+      estimatedBandwidth: Math.max(1, Math.ceil(peakNetworkThroughput * 8)),
+      estimatedIOPS: Math.max(1, Math.ceil(peakDiskIO))
+    };
+  }, [finalStats, finalSystemStats]);
 
   // Calculer la durée du test
   const testDuration = useMemo(() => {
@@ -276,6 +327,41 @@ const TestSummaryModal = ({
             </button>
           </div>
         </div>
+
+        {/* Section d'estimation des ressources */}
+        {resourceEstimations && (
+          <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-200">
+            <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <ServerIcon className="h-5 w-5 mr-2 text-blue-600" />
+              Estimated Resource Requirements
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                <CpuChipIcon className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                <div className="text-2xl font-bold text-gray-900">{resourceEstimations.estimatedCpuCores}</div>
+                <div className="text-sm text-gray-600">CPU Cores</div>
+              </div>
+              <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                <CircleStackIcon className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                <div className="text-2xl font-bold text-gray-900">{resourceEstimations.estimatedRam}</div>
+                <div className="text-sm text-gray-600">GB RAM</div>
+              </div>
+              <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                <WifiIcon className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                <div className="text-2xl font-bold text-gray-900">{resourceEstimations.estimatedBandwidth}</div>
+                <div className="text-sm text-gray-600">Mbps</div>
+              </div>
+              <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                <DiskIcon className="h-8 w-8 text-orange-600 mx-auto mb-2" />
+                <div className="text-2xl font-bold text-gray-900">{resourceEstimations.estimatedIOPS}</div>
+                <div className="text-sm text-gray-600">MB/s IOPS</div>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mt-3 text-center">
+              Based on peak performance observed during the test with recommended safety margins
+            </p>
+          </div>
+        )}
 
         {/* Contenu */}
         <div className="p-6 overflow-y-auto">
