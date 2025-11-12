@@ -1,12 +1,28 @@
 # Image Python de base
 FROM python:3.11-slim
 
-# Copie le requirements et installe toutes les dépendances en UNE couche
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+# Variables d'environnement pour éviter les fichiers .pyc et buffer
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Répertoire de travail par défaut
+# Créer un utilisateur non-root pour la sécurité
+RUN useradd -m -u 1000 locust && \
+    mkdir -p /mnt/locust /scenarios && \
+    chown -R locust:locust /mnt/locust /scenarios
+
+# Copier et installer les dépendances
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Définir l'utilisateur
+USER locust
+
+# Répertoire de travail
 WORKDIR /mnt/locust
 
-# CMD par défaut : lance Locust et cherche le locustfile dans /mnt/locust
-CMD ["locust", "-f", "locustfile.py"]
+# Exposer les ports
+EXPOSE 8089 9646
+
+# CMD par défaut
+CMD ["locust", "-f", "locustfile.py", "--master"]

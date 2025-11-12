@@ -1,17 +1,33 @@
 global:
-  scrape_interval: 10s  # Temps entre chaque scrape
+  scrape_interval: 5s  # Temps entre chaque scrape
+  evaluation_interval: 5s
 
 scrape_configs:
+  # Prometheus lui-même
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Locust dans Docker Compose
   - job_name: 'locust'
     static_configs:
-      - targets: ['locust:9646']  # Localisation de Prometheus sur Locust
+      - targets: ['locust:8089']  # Port web de Locust
+        labels:
+          service: 'locust'
+          environment: 'docker'
 
+  # Node Exporter sur l'hôte (hors Docker)
   - job_name: 'node_exporter'
     static_configs:
-      - targets: ['node_exporter:9100']  # Localisation de Prometheus sur Node Exporter
+      - targets: ['172.17.0.1:9100']  # IP du bridge Docker
+        labels:
+          instance: 'ubuntu-host'
+          service: 'node_exporter'
 
-  # Si tu utilises GPU exporter, décommente cette section
-  # - job_name: 'gpu_exporter'
-  #   static_configs:
-  #     - targets: ['gpu_exporter:9400']  # Localisation de Prometheus sur GPU Exporter
-
+  # cAdvisor sur l'hôte (monitoring des conteneurs Docker)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['172.17.0.1:8080']  # IP du bridge Docker
+        labels:
+          instance: 'ubuntu-host'
+          service: 'cadvisor'
